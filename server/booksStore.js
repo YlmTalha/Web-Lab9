@@ -36,7 +36,7 @@ export async function isDuplicate(title, author, excludeId = null) {
 
 export async function create(data) {
   await delay();
-  const book = { ...data, id: nextId };
+  const book = { id: nextId, ...data };
   nextId += 1;
   books = [...books, book]; // new array, old one untouched
   return book;
@@ -44,7 +44,7 @@ export async function create(data) {
 
 export async function replace(id, data) {
   await delay();
-  const updated = { ...data, id };
+  const updated = { id, ...data };
   books = books.map((b) => (b.id === id ? updated : b));
   return updated;
 }
