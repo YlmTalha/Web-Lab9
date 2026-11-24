@@ -73,3 +73,205 @@ assignment9/
 | `GET /api/crash` | – | 500 (kept on purpose, see below) |
 
 `GET /api/crash` is a test route that throws inside an async handler. I kept it to show that the error middleware catches it and answers `500 {"error":"Something went wrong"}` without a stack trace (the error is only logged on the server).
+
+## Testing evidence (curl)
+
+Headers such as `Date`, `Connection` and `X-Powered-By` were removed to keep the output short.
+
+**1. Stats before any change (200)**
+
+```
+$ curl --include 'http://localhost:3000/api/stats'
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 125
+
+{"total":6,"read":4,"unread":2,"averageRating":4,"byGenre":{"fiction":1,"fantasy":2,"science":1,"history":1,"non-fiction":1}}
+
+```
+
+**2. List with two query parameters (200)**
+
+```
+$ curl --include 'http://localhost:3000/api/books?genre=fantasy&sort=year&order=desc'
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 235
+
+[{"id":5,"title":"The Name of the Wind","author":"Patrick Rothfuss","year":2007,"genre":"fantasy","read":false,"rating":null},{"id":2,"title":"The Hobbit","author":"J.R.R. Tolkien","year":1937,"genre":"fantasy","read":true,"rating":4}]
+
+```
+
+**3. One book (200)**
+
+```
+$ curl --include http://localhost:3000/api/books/1
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 101
+
+{"id":1,"title":"Dune","author":"Frank Herbert","year":1965,"genre":"fiction","read":true,"rating":5}
+
+```
+
+**4. Create a book (201 + Location)**
+
+```
+$ curl --include -X POST http://localhost:3000/api/books -H 'Content-Type: application/json' -d '{"title":"Neuromancer","author":"William Gibson","year":1984,"genre":"fiction"}'
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Location: /api/books/7
+Content-Type: application/json; charset=utf-8
+Content-Length: 113
+
+{"id":7,"title":"Neuromancer","author":"William Gibson","year":1984,"genre":"fiction","read":false,"rating":null}
+
+```
+
+**5. Invalid body (400)**
+
+```
+$ curl --include -X POST http://localhost:3000/api/books -H 'Content-Type: application/json' -d '{"title":"","author":"Someone","year":3000,"genre":"poetry"}'
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 57
+
+{"error":"title must be a string of 1 to 100 characters"}
+
+```
+
+**6. Repeated query parameter (400)**
+
+```
+$ curl --include 'http://localhost:3000/api/books?genre=fiction&genre=history'
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 58
+
+{"error":"query parameter \"genre\" must not be repeated"}
+
+```
+
+**7. Missing book (404)**
+
+```
+$ curl --include http://localhost:3000/api/books/99
+HTTP/1.1 404 Not Found
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 29
+
+{"error":"Book 99 not found"}
+
+```
+
+**8. Duplicate title + author, different case (409)**
+
+```
+$ curl --include -X POST http://localhost:3000/api/books -H 'Content-Type: application/json' -d '{"title":"dune","author":"FRANK HERBERT","year":1965,"genre":"fiction"}'
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 52
+
+{"error":"\"dune\" by FRANK HERBERT already exists"}
+
+```
+
+**9. PATCH book 7: only read and rating change, other fields are kept (200)**
+
+```
+$ curl --include -X PATCH http://localhost:3000/api/books/7 -H 'Content-Type: application/json' -d '{"read":true,"rating":5}'
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 109
+
+{"id":7,"title":"Neuromancer","author":"William Gibson","year":1984,"genre":"fiction","read":true,"rating":5}
+
+```
+
+**10. PUT book 7: the whole book is replaced; fields not sent go back to defaults (read false, rating null) (200)**
+
+```
+$ curl --include -X PUT http://localhost:3000/api/books/7 -H 'Content-Type: application/json' -d '{"title":"Neuromancer","author":"William Gibson","year":1984,"genre":"science"}'
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 113
+
+{"id":7,"title":"Neuromancer","author":"William Gibson","year":1984,"genre":"science","read":false,"rating":null}
+
+```
+
+**11. Stats after the changes (200) – total is now 7**
+
+```
+$ curl --include 'http://localhost:3000/api/stats'
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 125
+
+{"total":7,"read":4,"unread":3,"averageRating":4,"byGenre":{"fiction":1,"fantasy":2,"science":2,"history":1,"non-fiction":1}}
+
+```
+
+**12. Delete (204, no body)**
+
+```
+$ curl --include -X DELETE http://localhost:3000/api/books/7
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+
+
+```
+
+**13. Same delete repeated (404)**
+
+```
+$ curl --include -X DELETE http://localhost:3000/api/books/7
+HTTP/1.1 404 Not Found
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Content-Type: application/json; charset=utf-8
+Content-Length: 28
+
+{"error":"Book 7 not found"}
+
+```
+
+**14. Preflight (OPTIONS) as the browser sends it before a PATCH**
+
+```
+$ curl --include -X OPTIONS http://localhost:3000/api/books/1 -H 'Origin: http://localhost:5173' -H 'Access-Control-Request-Method: PATCH' -H 'Access-Control-Request-Headers: content-type'
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin, Access-Control-Request-Headers
+Access-Control-Allow-Methods: GET,HEAD,PUT,PATCH,POST,DELETE
+Access-Control-Allow-Headers: content-type
+Content-Length: 0
+
+
+```
+
+### Preflight in the browser (Network tab)
+
+When the client toggles "read" it sends a `PATCH` with `Content-Type: application/json`. This is not a "simple" request, so in the Network tab there is first an **OPTIONS** request to `http://localhost:3000/api/books/:id` with status **204**. Its response headers are `Access-Control-Allow-Origin: http://localhost:5173`, `Access-Control-Allow-Methods: GET,HEAD,PUT,PATCH,POST,DELETE` and `Access-Control-Allow-Headers: content-type`. Only after that does the real `PATCH` request appear (status 200). Request 14 above shows the same exchange with curl.
