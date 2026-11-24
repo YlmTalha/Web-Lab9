@@ -5,6 +5,8 @@ export default function BookList({ books, loading, error, busyId, onEdit, onTogg
   if (books.length === 0) return <p>No books match your filters.</p>;
 
   return (
+    <>
+    <p>{books.length} {books.length === 1 ? 'book' : 'books'} shown</p>
     <table>
       <thead>
         <tr><th>Title</th><th>Author</th><th>Year</th><th>Genre</th><th>Read</th><th>Rating</th><th></th></tr>
@@ -36,5 +38,6 @@ export default function BookList({ books, loading, error, busyId, onEdit, onTogg
         })}
       </tbody>
     </table>
+    </>
   );
 }
