@@ -28,6 +28,10 @@ export default function BookControls({ query, onChange }) {
         <option value="asc">Ascending</option>
         <option value="desc">Descending</option>
       </select>
+      {/* Back to the default list: a brand-new query object, nothing is mutated */}
+      <button type="button" onClick={() => onChange({ q: '', genre: '', read: '', sort: '', order: 'asc' })}>
+        Reset filters
+      </button>
     </div>
   );
 }
