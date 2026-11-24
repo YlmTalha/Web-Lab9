@@ -75,6 +75,91 @@ app.get('/api/books/:id', async (req, res) => {
   res.json(book);
 });
 
+// POST /api/books — create from a complete body
+app.post('/api/books', async (req, res) => {
+  const { error, value } = validateBook(req.body);
+  if (error) return res.status(400).json({ error });
+  if (await store.isDuplicate(value.title, value.author)) {
+    return res.status(409).json({ error: `"${value.title}" by ${value.author} already exists` });
+  }
+  const book = await store.create(value);
+  res.status(201).location(`/api/books/${book.id}`).json(book);
+});
+
+// PUT /api/books/:id — replace with a complete body
+app.put('/api/books/:id', async (req, res) => {
+  const id = readId(req, res);
+  if (id === null) return;
+  const { error, value } = validateBook(req.body);
+  if (error) return res.status(400).json({ error });
+  if (!(await store.getById(id))) return res.status(404).json({ error: `Book ${id} not found` });
+  if (await store.isDuplicate(value.title, value.author, id)) {
+    return res.status(409).json({ error: `"${value.title}" by ${value.author} already exists` });
+  }
+  res.json(await store.replace(id, value));
+});
+
+// PATCH /api/books/:id — change only the fields sent; the merged book must still be valid
+app.patch('/api/books/:id', async (req, res) => {
+  const id = readId(req, res);
+  if (id === null) return;
+  if (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object' });
+  }
+  const existing = await store.getById(id);
+  if (!existing) return res.status(404).json({ error: `Book ${id} not found` });
+
+  const merged = { ...existing, ...req.body }; // new object, existing untouched
+  const { error, value } = validateBook(merged);
+  if (error) return res.status(400).json({ error });
+  if (await store.isDuplicate(value.title, value.author, id)) {
+    return res.status(409).json({ error: `"${value.title}" by ${value.author} already exists` });
+  }
+  res.json(await store.replace(id, value));
+});
+
+// DELETE /api/books/:id — 204 with no body
+app.delete('/api/books/:id', async (req, res) => {
+  const id = readId(req, res);
+  if (id === null) return;
+  if (!(await store.getById(id))) return res.status(404).json({ error: `Book ${id} not found` });
+  await store.remove(id);
+  res.status(204).end();
+});
+
+// GET /api/stats — computed from the current data on every request
+app.get('/api/stats', async (req, res) => {
+  const books = await store.getAll();
+  const rated = books.filter((b) => b.rating !== null);
+  const read = books.filter((b) => b.read).length;
+  const byGenre = books.reduce((acc, b) => ({ ...acc, [b.genre]: (acc[b.genre] ?? 0) + 1 }), {});
+  const averageRating = rated.length === 0
+    ? null
+    : Math.round((rated.reduce((sum, b) => sum + b.rating, 0) / rated.length) * 10) / 10;
+
+  res.json({ total: books.length, read, unread: books.length - read, averageRating, byGenre });
+});
+
+// Deliberate crash route: proves that errors thrown in async handlers reach the error middleware
+app.get('/api/crash', async () => {
+  throw new Error('Deliberate crash for testing');
+});
+
+// 404 fallback for anything under /api that matched no route (Express 5 style, no '*')
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Error-handling middleware (4 parameters) — registered after all routes
+app.use((err, req, res, next) => {
+  // Malformed JSON body from express.json()
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed JSON in request body' });
+  }
+  console.error(err);
+  res.status(500).json({ error: 'Something went wrong' });
+});
+
 app.listen(PORT, () => {
   console.log(`Reading List API on http://localhost:${PORT} (allowed origin: ${CLIENT_ORIGIN})`);
 });
