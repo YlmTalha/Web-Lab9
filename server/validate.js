@@ -52,7 +52,8 @@ export function validateQuery(query) {
     if (Array.isArray(query[key])) return { error: `query parameter "${key}" must not be repeated` };
   }
   const { genre, read, q, sort, order = 'asc', limit = '50', page = '1' } = query;
-  const opts = { q: q ?? '', order };
+  const opts = { q: (q ?? '').trim(), order };
+  if (opts.q.length > 100) return { error: 'q must be at most 100 characters' };
 
   if (genre !== undefined) {
     if (!GENRES.includes(genre)) return { error: `genre must be one of: ${GENRES.join(', ')}` };
