@@ -291,3 +291,18 @@ When the client toggles "read" it sends a `PATCH` with `Content-Type: applicatio
 **6. Validation.** Client-side checks only exist for user convenience. Anyone can send a request without our form (curl, Postman, another app, or by editing the JS in DevTools), so the server is the only place where the rules can really be enforced. Also some rules, like duplicate title + author, can only be checked on the server because only it has all the data.
 
 **7. State (experiment).** After I added and deleted books and restarted the server, all changes were gone and the list was back to the 6 seed books. The data lives only in the server process's memory (a variable in `booksStore.js`), so it disappears when the process stops. To keep it we need persistent storage such as a database or at least a file.
+
+## Self-study notes
+
+- **URLSearchParams:** `new URLSearchParams()` + `set(key, value)` and `toString()` builds the query string and encodes special characters (spaces, `&`, `=`, Turkish letters) safely. I skip empty values so the server only gets real filters (`api/books.js`, `listBooks`).
+- **localeCompare:** `a.localeCompare(b, 'en', { sensitivity: 'base' })` compares strings alphabetically and ignores case, unlike `<` which compares character codes. Used for sorting by title and author. Sorting is done on a copy (`[...list].sort(...)`) so the stored array is never changed.
+- **import.meta.env in Vite:** Vite exposes env variables to client code through `import.meta.env`, but only those that start with `VITE_`. The prefix prevents secrets in `.env` (e.g. passwords used by other tools) from accidentally ending up in the public JavaScript bundle.
+- **204 in Express 5:** `res.status(204).end()` sends the status with no body. Sending JSON with a 204 is wrong because a 204 must not have a body. On the client, `request()` returns `null` for 204 instead of calling `response.json()`, which would fail on an empty body.
+- **Cancelling fetch:** an `AbortController` is created in the `useEffect`; its `signal` is passed to `fetch`, and the cleanup calls `controller.abort()`. The aborted fetch rejects with an error whose `name` is `"AbortError"`; I ignore that error so it is not shown to the user, and only the newest request updates the list.
+
+## Challenges
+
+- **PATCH validation:** the merged book (old values + changes) must be valid, so un-ticking "read" on a rated book would fail. In the client, un-reading a book sends `{ read: false, rating: null }` together.
+- **Repeated query parameters:** Express 5 turns `?genre=a&genre=b` into an array, so I check `Array.isArray` for every allowed parameter before using it.
+- **Rating sort:** books without a rating must always be last, also in descending order, so the comparator handles `null` before applying the direction.
+- **Not updating the screen too early:** every change waits for the server's answer; buttons are disabled while a request is in progress, and the server's error message is shown when it fails.
