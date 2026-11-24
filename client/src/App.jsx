@@ -91,12 +91,15 @@ export default function App() {
       setBooks((prev) => prev.map((b) => (b.id === saved.id ? saved : b)));
     });
 
-  const remove = (book) =>
-    runAction(book, async () => {
+  const remove = (book) => {
+    // Ask first: a deleted book cannot be restored
+    if (!window.confirm(`Delete "${book.title}"?`)) return;
+    return runAction(book, async () => {
       await api.deleteBook(book.id);
       setBooks((prev) => prev.filter((b) => b.id !== book.id));
       if (editing?.id === book.id) setEditing(null);
     });
+  };
 
   return (
     <main>
